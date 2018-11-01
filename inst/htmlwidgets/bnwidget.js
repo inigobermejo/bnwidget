@@ -20,48 +20,52 @@ HTMLWidgets.widget({
       .append('svg:path')
         .attr('d', 'M0,-5L10,0L0,5')
         .attr('fill', '#000');
-
-    // init D3 force layout
-    svg.append('svg:defs').append('svg:marker')
-        .attr('id', 'start-arrow')
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 4)
-        .attr('markerWidth', 3)
-        .attr('markerHeight', 3)
-        .attr('orient', 'auto')
-      .append('svg:path')
-        .attr('d', 'M10,-5L0,0L10,5')
-        .attr('fill', '#000');
     
-    // init D3 drag support
-    return d3.forceSimulation();
+    // init D3 force layout
+    var collisionForce = d3.forceCollide(50).strength(1).iterations(50);
+    return d3.forceSimulation()
+               .alphaDecay(0.01)
+               .force("center", d3.forceCenter(width / 2, height / 2))
+               .force("collisionForce", collisionForce);
   },
   
-    resize: function(el, width, height, force) {
+    resize: function(el, width, height, simulation) {
     
     d3.select(el).select("svg")
         .attr("width", width)
         .attr("height", height);
 
-    force.force("center", d3.forceCenter(width / 2, height / 2))
+    simulation.force("center", d3.forceCenter(width / 2, height / 2))
         .restart();
   },
 
-  renderValue: function(el, x, force) {
+  renderValue: function(el, x, simulation) {
         
     // convert links and nodes data frames to d3 friendly format
     var links = HTMLWidgets.dataframeToD3(x.links);
     var nodes = HTMLWidgets.dataframeToD3(x.nodes);
-    var cpds = HTMLWidgets.dataframeToD3(x.cpds);
+    var cpds = x.cpds; // HTMLWidgets.dataframeToD3(x.cpds);
+    var settings = x.settings;
     
-    force
-      .nodes(d3.values(nodes)).force('link', d3.forceLink().id((d) => d.id).distance(150))
-      .force('charge', d3.forceManyBody().strength(-500))
-      .force('x', d3.forceX(width / 2))
-      .force('y', d3.forceY(height / 2))
-      .on('tick', tick);
     
-    force.alpha(1).restart();
+      
+    simulation
+      .force("charge", d3.forceManyBody().strength(settings.charge))
+      .on("tick", tick);
+    
+    simulation
+      .nodes(nodes);
+    
+    simulation
+      .force("link", d3.forceLink(links).id(function(d) { return d.name; }))    
+    //simulation
+    //  .force("link")
+    //  .links(links);
+      
+    simulation
+      .force("link").distance(settings.linkDistance)
+        
+    simulation.alpha(1).restart();
     
     // select the svg element
     var svg = d3.select(el).select("svg");
@@ -71,76 +75,104 @@ HTMLWidgets.widget({
       .on('mousemove', mousemove)
       .on('mouseup', mouseup);
       
+    svg =  svg.append("g").attr("class","zoom-layer")
+        .append("g")
+      
     // line displayed when dragging new nodes
-   const dragLine = svg.append('svg:path')
-                       .attr('class', 'link dragline hidden')
+   var dragLine = svg.append('svg:path')
+                       .attr('class', 'dragline hidden')
                        .attr('d', 'M0,0L0,0');
   
-    var bajsNet = new bajsianNetwork(links, nodes, cpds)
+   // init D3 drag support
+   var drag = d3.drag()
+    .on('start', function(d){
+      if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+
+      d.fx = d.x;
+      d.fy = d.y;
+    })
+    .on('drag', function(d) {
+      d.fx = d3.event.x;
+      d.fy = d3.event.y;
+    })
+    .on('end', function(d) {
+      if (!d3.event.active) simulation.alphaTarget(0);
+
+      d.fx = null;
+      d.fy = null;
+    });
+    var bajsNet = new BajsianNetwork(links, nodes, cpds);
     
-    // handles to link and node element groups
-    let linkElements = svg.append('svg:g').selectAll('path');
-    let nodeElements = svg.append('svg:g').selectAll('g');
-
     // mouse event vars
-    let selectedNode = null;
-    let selectedLink = null;
-    let mousedownLink = null;
-    let mousedownNode = null;
-    let mouseupNode = null;
-
+    var selectedNode = null;
+    var selectedLink = null;
+    var mousedownLink = null;
+    var mousedownNode = null;
+    var mouseupNode = null;
+    
+    // listen to mouse events
+    svg.on('mousedown', mousedown)
+      .on('mousemove', mousemove)
+      .on('mouseup', mouseup);
+    
+    restart();
+    
+    ////////////////////////////
+    // functions
+    ////////////////////////////
+    // reset mouse variables
     function resetMouseVars() {
       mousedownNode = null;
       mouseupNode = null;
       mousedownLink = null;
     }
 
-    // update force layout (called automatically each iteration)
+    // update force layout
     function tick() {
-      // draw links with proper padding
-      linkElements.attr('d', (d) => {
-        sourceX = d.source.x + d.source.width / 2;
-        sourceY = d.source.y + d.source.height / 2;
-        targetX = d.target.x + d.target.width / 2;
-        targetY = d.target.y + d.target.height / 2;
+      var linkElements = svg.selectAll('.link');
+      var nodeElements = svg.selectAll('.node');
       
-        [sourceX, sourceY] = intersectPointRect(targetX, targetY, sourceX, sourceY, d.source.width, d.source.height);
-        [targetX, targetY] = intersectPointRect(sourceX, sourceY, targetX, targetY, d.target.width, d.target.height);
+      // draw links with proper padding
+      linkElements.attr('d', function(d) {
+        var sourceX = d.source.x + d.source.width / 2;
+        var sourceY = d.source.y + d.source.height / 2;
+        var targetX = d.target.x + d.target.width / 2;
+        var targetY = d.target.y + d.target.height / 2;
+      
+        var newSource = intersectPointRect(targetX, targetY, sourceX, sourceY, d.source.width, d.source.height);
+        var newTarget = intersectPointRect(sourceX, sourceY, targetX, targetY, d.target.width, d.target.height);
 
-        return `M${sourceX},${sourceY}L${targetX},${targetY}`;
+        return "M"+ newSource.x +","+ newSource.y +"L"+ newTarget.x +","+ newTarget.y;
       });
       // draw nodes
-      nodElements.attr('transform', (d) => `translate(${d.x},${d.y})`);
+      nodeElements.attr('transform', function(d) { return "translate(" + d.x + "," + d.y + ")"});
     }
-        // app starts here
-    svg.on('mousedown', mousedown)
-      .on('mousemove', mousemove)
-      .on('mouseup', mouseup);
-    d3.select(window)
-      .on('keydown', keydown)
-      .on('keyup', keyup);
-    restart();
 
     // update graph (called when needed)
     function restart() {
-      // path (link) group
-      path = path.data(links);
-
+      var linkElements = svg.selectAll('.link');
+      var nodeElements = svg.selectAll('.node'); 
+      
+      linkElements = linkElements.data(links);
+      
       // update existing links
-      path.classed('selected', (d) => d === selectedLink)
-        .style('marker-start', (d) => d.left ? 'url(#start-arrow)' : '')
-        .style('marker-end', (d) => d.right ? 'url(#end-arrow)' : '');
+      linkElements
+        .selectAll('path')
+        .classed('selected', function(d) { return d === selectedLink;})
+        .style('marker-start', '')
+        .style('marker-end', 'url(#end-arrow)');
 
       // remove old links
-      path.exit().remove();
+      linkElements.exit().remove();
 
       // add new links
-      path = path.enter().append('svg:path')
+      linkElements = linkElements.enter().append('path')
         .attr('class', 'link')
-        .classed('selected', (d) => d === selectedLink)
-        .style('marker-start', (d) => d.left ? 'url(#start-arrow)' : '')
-        .style('marker-end', (d) => d.right ? 'url(#end-arrow)' : '')
-        .on('mousedown', (d) => {
+        .style("stroke", '#000')
+        .style("fill", 'none')
+        .style("stroke-width", function(d) {return (d === selectedLink)? '5px' : '4px';})
+        .style('marker-end', 'url(#end-arrow)')
+        .on('mousedown', function(d) {
           if (d3.event.ctrlKey) return;
 
           // select link
@@ -149,40 +181,52 @@ HTMLWidgets.widget({
           selectedNode = null;
           restart();
         })
-        .merge(path);
+        .on("mouseover", function(d) {
+          d3.select(this)
+            .style("opacity", 1);
+        })
+        .on("mouseout", function(d) {
+          d3.select(this)
+            .style("opacity", settings.opacity);
+        }).merge(linkElements);
 
-      // NB: the function arg is crucial here! nodes are known by id, not by index!
-      nodeElements = nodeElements.data(nodes, (d) => d.id);
+      // NB: the function arg is crucial here! nodes are known by name, not by index!
+      nodeElements = nodeElements.data(nodes, function(d) { return d.name;});
 
       // update existing nodes (reflexive & selected visual states)
       nodeElements.selectAll('rect')
-        .style('fill', (d) => (d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398')
+        .style('fill', function(d) {return (d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398';})
 
       // remove old nodes
       nodeElements.exit().remove();
 
       // add new nodes
-      var g = nodeElements.enter().append('svg:g');
+      var newNodes = nodeElements
+        .enter()
+        .append('g')
+        .attr('class', 'node');
 
-      g.append('svg:rect')
-        .attr('class', 'node')
-        .attr('width', 100)
-        .attr('height', 50)
+      newNodes.append('svg:rect')
+        .attr('width', function(d) { return Math.max(textWidth(d.name, "12px sans-serif"), d.width); })
+        .attr('height', function(d) { return d.height; })
         .attr('rx', 5)
         .attr('ry', 5)
-        .style('fill', (d) => (d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398')
-        .style('stroke', (d) => d3.rgb(colors('#F2D398')).darker().toString())
+        .style('fill', '#F2D398') //function(d) {(d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398';})
+        .style('stroke', function(d) {return d3.rgb('#F2D398').darker().toString();})
+        .style("stroke-width", "2px")
+
+        newNodes
         .on('mouseover', function (d) {
           if (!mousedownNode || d === mousedownNode) return;
-          // enlarge target node
-          d3.select(this).attr('transform', 'scale(1.1)');
-        })
+          // make border wider
+          d3.select(this).style("stroke-width", "3px");
+         })
         .on('mouseout', function (d) {
           if (!mousedownNode || d === mousedownNode) return;
-          // unenlarge target node
-          d3.select(this).attr('transform', '');
+          // turn border back to normal
+          d3.select(this).style("stroke-width", "2px");
         })
-        .on('mousedown', (d) => {
+        .on('mousedown', function(d) {
           if (d3.event.ctrlKey) return;
 
           // select node
@@ -196,7 +240,7 @@ HTMLWidgets.widget({
           dragLine
             .style('marker-end', 'url(#end-arrow)')
             .classed('hidden', false)
-            .attr('d', `M${mousedownNodeX},${mousedownNodeY}L${mousedownNodeX},${mousedownNodeY}`);
+            .attr('d', "M" + mousedownNodeX +","+ mousedownNodeY +"L"+ mousedownNodeX +","+ mousedownNodeY);
 
           restart();
         })
@@ -215,41 +259,59 @@ HTMLWidgets.widget({
             return;
           }
 
-          // unenlarge target node
-          d3.select(this).attr('transform', '');
+          // return node edge back to normal width
+          d3.select(this).style("stroke-width", "3px");
 
           // add link to graph (update if exists)
-\         var source = mousedownNode;
+          var source = mousedownNode;
           var target = mouseupNode;
 
-          var link = links.filter((l) => l.source === source && l.target === target)[0];
-          if (!link) {
-            links.push({ source, target, left: !isRight, right: isRight });
-          }
+          var link = links.filter(function(l) {return l.source === source && l.target === target;})[0];
+          //if (!link) {
+          //  links.push([source, target]);
+          //}
 
           // select new link
           selectedLink = link;
           selectedNode = null;
           restart();
-        });
+        })
+        .call(drag);
 
-      // show node IDs
-      g.append('svg:text')
-        .attr('x', 50)
-        .attr('y', 30)
+      // show node names
+      newNodes.append('svg:text')
+        .attr('x', function(d) { return d.width/2;})
+        .attr('y', function(d) { return d.height/2;})
+        .attr('textLength', function(d) { return d.width;})
         .attr('class', 'id')
-        .text((d) => `Node ${d.id}`);
-
-      nodeElements = g.merge(nodeElements);
+        .text(function(d) { return d.name;})
+        .style("pointer-events", "none")
+        .style("font", "12px sans-serif")
+        .style("text-anchor", "middle");
+        
+      nodeElements = newNodes.merge(nodeElements);
+      
+      //nodeElements.selectAll('rect')
+      //  .attr('width', )
 
       // set the graph in motion
-      force
+      simulation
         .nodes(nodes)
         .force('link').links(links);
 
-      force.alphaTarget(0.3).restart();
+      simulation.alphaTarget(0.3).restart();
     }
-
+    
+    function textWidth(string, font)
+    {
+      // re-use canvas object for better performance
+      var canvas = textWidth.canvas || (textWidth.canvas = document.createElement("canvas"));
+      var context = canvas.getContext("2d");
+      context.font = font;
+      var metrics = context.measureText(string);
+      return metrics.width;
+    }
+    
     function mousedown() {
       // because :active only works in WebKit?
       svg.classed('active', true);
@@ -272,7 +334,7 @@ HTMLWidgets.widget({
       xx = mousedownNode.x + mousedownNode.width / 2;
       yy = mousedownNode.y + mousedownNode.height / 2;
       // update drag line
-      dragLine.attr('d', `M${xx},${yy}L${d3.mouse(this)[0]},${d3.mouse(this)[1]}`);
+      dragLine.attr('d', "M"+ xx +","+ yy +"L"+ d3.mouse(this)[0]+","+ d3.mouse(this)[1]);
 
       restart();
     }
@@ -296,8 +358,9 @@ HTMLWidgets.widget({
     // Returns intersection point between the line starting at pointX, pointY and a
     // rectangle centered at (rectX, rectY) with height rectH and width rectW
     function intersectPointRect(pointX, pointY, rectX, rectY, rectW, rectH) {
-      s = (pointY - rectY)/(pointX - rectX);
-      [x, y] = [pointX, pointY];
+      var s = (pointY - rectY)/(pointX - rectX);
+      var x = pointX;
+      var y = pointY;
       if(-rectH/2 <= s * rectW/2 && s * rectW/2 <= rectH/2) { // then the line intersects
         if(pointX > rectX) // The right edge
         {
@@ -324,7 +387,7 @@ HTMLWidgets.widget({
         }
       }
       // if the point is inside the rectangle, return pointX and pointY
-      return [x, y];
+      return {x:x, y:y};
     }
   
   },  

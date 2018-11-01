@@ -1,0 +1,16 @@
+Package: bnwidget
+Type: Package
+Title: D3 JavaScript Bayesian Networks for R
+Description: 'D3' 'JavaScript' Bayesian Networks 'R'.
+Version: 0.0.1
+Date: 2018-10-26
+Author: Inigo Bermejo [aur, cre] <inigo.bermejo@gmail.com>
+Maintainer: Inigo Bermejo <inigo.bermejo@gmail.com>
+URL: https://github.com/inigobermejo/bnwidget
+BugReports: https://github.com/inigobermejo/bnwidget/issues
+License: GPL (>= 3)
+Depends:
+    R (>= 3.0.0)
+Imports:
+    htmlwidgets (>= 0.3.2)
+RoxygenNote: 6.1.0

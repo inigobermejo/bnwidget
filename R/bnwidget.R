@@ -4,22 +4,36 @@
 #' @import htmlwidgets
 #' @export
 
-bnwidget <- function(nodes, links, cpds,
-                  width = NULL, height = NULL) {
+bnwidget <- function(nodes, 
+                     links,
+                     cpds,
+                     linkDistance = 150,
+                     opacity = 0.75,
+                     charge = -10,
+                     width = NULL, 
+                     height = NULL) {
   
-  # read the gexf file
-  data <- paste(readLines(gexf), collapse="\n")
   
   # create a list that contains the settings
-  # settings <- list()
-  
+   settings <- list(
+     linkDistance = linkDistance,
+     opacity = opacity,
+     charge = charge
+   )
+   # create links data
+   links <- data.frame(source = links[,"from"],
+                       target = links[,"to"])
+   
+   # create nodes data
+   nodes <- data.frame(name = nodes, group = 1, width = 100, height = 50)
+
   # pass the data and settings using 'x'
   x <- list(
     nodes = nodes,
     links = links,
-    cpds = cpds
+    cpds = cpds,
+    settings = settings
   )
-  
   # create the widget
   htmlwidgets::createWidget("bnwidget", x, width = width, height = height)
 }

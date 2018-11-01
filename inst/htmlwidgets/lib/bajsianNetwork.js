@@ -1,4 +1,4 @@
-baysianNetwork = function (nodes, links, cpds)
+BajsianNetwork = function (nodes, links, cpds)
 {
   var _nodes = nodes,
       _links = links,
