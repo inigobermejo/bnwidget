@@ -8,21 +8,13 @@ HTMLWidgets.widget({
     svg = d3.select(el).append("svg")
     .attr("width", width)
     .attr("height", height);
-     
-    // define arrow markers for graph links
-    svg.append('svg:defs').append('svg:marker')
-        .attr('id', 'end-arrow')
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 6)
-        .attr('markerWidth', 3)
-        .attr('markerHeight', 3)
-        .attr('orient', 'auto')
-      .append('svg:path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', '#000');
     
+    if (HTMLWidgets.shinyMode) {
+      Shiny.onInputChange("selectedNode", "-");
+    }
+          
     // init D3 force layout
-    var collisionForce = d3.forceCollide(50).strength(1).iterations(50);
+    var collisionForce = d3.forceCollide(75).strength(1).iterations(50);
     return d3.forceSimulation()
                .alphaDecay(0.01)
                .force("center", d3.forceCenter(width / 2, height / 2))
@@ -44,10 +36,9 @@ HTMLWidgets.widget({
     // convert links and nodes data frames to d3 friendly format
     var links = HTMLWidgets.dataframeToD3(x.links);
     var nodes = HTMLWidgets.dataframeToD3(x.nodes);
+    var node_states = x.node_states;
     var cpds = x.cpds; // HTMLWidgets.dataframeToD3(x.cpds);
     var settings = x.settings;
-    
-    
       
     simulation
       .force("charge", d3.forceManyBody().strength(settings.charge))
@@ -69,6 +60,18 @@ HTMLWidgets.widget({
     
     // select the svg element
     var svg = d3.select(el).select("svg");
+    svg.selectAll("*").remove();
+    // define arrow markers for graph links
+    svg.append('svg:defs').append('svg:marker')
+        .attr('id', 'end-arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 6)
+        .attr('markerWidth', 3)
+        .attr('markerHeight', 3)
+        .attr('orient', 'auto')
+      .append('svg:path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', '#000');
     
     // listen to mouse events
     svg.on('mousedown', mousedown)
@@ -77,14 +80,32 @@ HTMLWidgets.widget({
       
     svg =  svg.append("g").attr("class","zoom-layer")
         .append("g")
-      
+        
+    var zoom = d3.zoom();
+    
+    // add zooming if requested
+    if (settings.zoom) {
+      function redraw() {
+        d3.select(el).select(".zoom-layer")
+          .attr("transform", d3.event.transform);
+      }
+      zoom.on("zoom", redraw)
+
+      d3.select(el).select("svg")
+        .attr("pointer-events", "all")
+        .call(zoom);
+
+    } else {
+      zoom.on("zoom", null);
+    }
+    
     // line displayed when dragging new nodes
-   var dragLine = svg.append('svg:path')
+    var dragLine = svg.append('svg:path')
                        .attr('class', 'dragline hidden')
                        .attr('d', 'M0,0L0,0');
   
-   // init D3 drag support
-   var drag = d3.drag()
+    // init D3 drag support
+    var dragNode = d3.drag()
     .on('start', function(d){
       if (!d3.event.active) simulation.alphaTarget(0.3).restart();
 
@@ -109,11 +130,6 @@ HTMLWidgets.widget({
     var mousedownLink = null;
     var mousedownNode = null;
     var mouseupNode = null;
-    
-    // listen to mouse events
-    svg.on('mousedown', mousedown)
-      .on('mousemove', mousemove)
-      .on('mouseup', mouseup);
     
     restart();
     
@@ -207,7 +223,9 @@ HTMLWidgets.widget({
         .attr('class', 'node');
 
       newNodes.append('svg:rect')
-        .attr('width', function(d) { return Math.max(textWidth(d.name, "12px sans-serif"), d.width); })
+        .attr('width', function(d) { 
+                          return Math.max(textWidth(d.name, "12px sans-serif") + 30, d.width); 
+         })
         .attr('height', function(d) { return d.height; })
         .attr('rx', 5)
         .attr('ry', 5)
@@ -217,14 +235,19 @@ HTMLWidgets.widget({
 
         newNodes
         .on('mouseover', function (d) {
-          if (!mousedownNode || d === mousedownNode) return;
+          //if (!mousedownNode || d === mousedownNode) return;
           // make border wider
-          d3.select(this).style("stroke-width", "3px");
+          d3.select(this).selectAll("rect").style("stroke-width", "3px");
          })
         .on('mouseout', function (d) {
-          if (!mousedownNode || d === mousedownNode) return;
+          //if (!mousedownNode || d === mousedownNode) return;
           // turn border back to normal
-          d3.select(this).style("stroke-width", "2px");
+          d3.select(this).selectAll("rect").style("stroke-width", "2px");
+        })
+        .on('dblclick', function (d) {
+          //if (!mousedownNode || d === mousedownNode) return;
+          // turn border back to normal
+          d3.select(this).selectAll("rect").style("fill", '#FFFFFF');
         })
         .on('mousedown', function(d) {
           if (d3.event.ctrlKey) return;
@@ -233,6 +256,10 @@ HTMLWidgets.widget({
           mousedownNode = d;
           selectedNode = (mousedownNode === selectedNode) ? null : mousedownNode;
           selectedLink = null;
+          
+          if (HTMLWidgets.shinyMode) {
+            Shiny.onInputChange("selectedNode", mousedownNode.name);
+          }
 
           // reposition drag line
           mousedownNodeX = mousedownNode.x + mousedownNode.width / 2;
@@ -276,18 +303,31 @@ HTMLWidgets.widget({
           selectedNode = null;
           restart();
         })
-        .call(drag);
+        .call(dragNode);
 
       // show node names
-      newNodes.append('svg:text')
-        .attr('x', function(d) { return d.width/2;})
-        .attr('y', function(d) { return d.height/2;})
-        .attr('textLength', function(d) { return d.width;})
+      newNodes.append('text')
+        .attr('x', 15)
+        .attr('y', 15)
+        //.attr('textLength', function(d) { return d.width;})
         .attr('class', 'id')
         .text(function(d) { return d.name;})
         .style("pointer-events", "none")
         .style("font", "12px sans-serif")
-        .style("text-anchor", "middle");
+        .style("text-anchor", "left")
+        
+      newNodes  
+        .append('g')
+        .selectAll('text')
+        .data(function(d){return node_states[d.name]})
+        .enter()
+        .append('text')
+        .attr('x', 15)
+        .attr('y', function(d, i){return 30 + i * 20;})
+        .text(function(d) { return d;})
+        .style("font", "12px sans-serif")
+        .style("text-anchor", "left");
+      
         
       nodeElements = newNodes.merge(nodeElements);
       

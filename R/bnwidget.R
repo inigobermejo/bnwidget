@@ -7,9 +7,10 @@
 bnwidget <- function(nodes, 
                      links,
                      cpds,
+                     node_states = NULL,
                      linkDistance = 150,
                      opacity = 0.75,
-                     charge = -10,
+                     charge = 0,
                      width = NULL, 
                      height = NULL) {
   
@@ -23,7 +24,10 @@ bnwidget <- function(nodes,
    # create links data
    links <- data.frame(source = links[,"from"],
                        target = links[,"to"])
-   
+   if(is.null(node_states))
+   {
+     node_states <- lapply(cpds, function(x) rownames(x))
+   }
    # create nodes data
    nodes <- data.frame(name = nodes, group = 1, width = 100, height = 50)
 
@@ -32,6 +36,7 @@ bnwidget <- function(nodes,
     nodes = nodes,
     links = links,
     cpds = cpds,
+    node_states = node_states,
     settings = settings
   )
   # create the widget
