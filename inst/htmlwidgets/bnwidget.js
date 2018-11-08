@@ -14,7 +14,7 @@ HTMLWidgets.widget({
     }
           
     // init D3 force layout
-    var collisionForce = d3.forceCollide(75).strength(1).iterations(50);
+    var collisionForce = d3.forceCollide(100).strength(1).iterations(50);
     return d3.forceSimulation()
                .alphaDecay(0.01)
                .force("center", d3.forceCenter(width / 2, height / 2))
@@ -37,8 +37,10 @@ HTMLWidgets.widget({
     var links = HTMLWidgets.dataframeToD3(x.links);
     var nodes = HTMLWidgets.dataframeToD3(x.nodes);
     var node_states = x.node_states;
+    var marginal_probs = x.marginal_probs;
     var cpds = x.cpds; // HTMLWidgets.dataframeToD3(x.cpds);
     var settings = x.settings;
+    var ticksSinceRestart = 0;
       
     simulation
       .force("charge", d3.forceManyBody().strength(settings.charge))
@@ -113,6 +115,7 @@ HTMLWidgets.widget({
       d.fy = d.y;
     })
     .on('drag', function(d) {
+      ticksSinceRestart = 0;
       d.fx = d3.event.x;
       d.fy = d3.event.y;
     })
@@ -162,10 +165,15 @@ HTMLWidgets.widget({
       });
       // draw nodes
       nodeElements.attr('transform', function(d) { return "translate(" + d.x + "," + d.y + ")"});
+      ticksSinceRestart++;
+      if(ticksSinceRestart > 100)
+        simulation.stop();
     }
 
     // update graph (called when needed)
     function restart() {
+      ticksSinceRestart = 0;
+      
       var linkElements = svg.selectAll('.link');
       var nodeElements = svg.selectAll('.node'); 
       
@@ -210,7 +218,7 @@ HTMLWidgets.widget({
       nodeElements = nodeElements.data(nodes, function(d) { return d.name;});
 
       // update existing nodes (reflexive & selected visual states)
-      nodeElements.selectAll('rect')
+      nodeElements.selectAll('.node_background')
         .style('fill', function(d) {return (d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398';})
 
       // remove old nodes
@@ -226,6 +234,7 @@ HTMLWidgets.widget({
         .attr('width', function(d) { 
                           return Math.max(textWidth(d.name, "12px sans-serif") + 30, d.width); 
          })
+        .attr('class', 'node_background')
         .attr('height', function(d) { return d.height; })
         .attr('rx', 5)
         .attr('ry', 5)
@@ -237,18 +246,18 @@ HTMLWidgets.widget({
         .on('mouseover', function (d) {
           //if (!mousedownNode || d === mousedownNode) return;
           // make border wider
-          d3.select(this).selectAll("rect").style("stroke-width", "3px");
+          d3.select(this).selectAll(".node_background").style("stroke-width", "3px");
          })
         .on('mouseout', function (d) {
           //if (!mousedownNode || d === mousedownNode) return;
           // turn border back to normal
-          d3.select(this).selectAll("rect").style("stroke-width", "2px");
+          d3.select(this).selectAll(".node_background").style("stroke-width", "2px");
         })
-        .on('dblclick', function (d) {
+        //.on('dblclick', function (d) {
           //if (!mousedownNode || d === mousedownNode) return;
           // turn border back to normal
-          d3.select(this).selectAll("rect").style("fill", '#FFFFFF');
-        })
+          //d3.select(this).selectAll(".node_background").style("fill", '#FFFFFF');
+        //})
         .on('mousedown', function(d) {
           if (d3.event.ctrlKey) return;
 
@@ -313,21 +322,94 @@ HTMLWidgets.widget({
         .attr('class', 'id')
         .text(function(d) { return d.name;})
         .style("pointer-events", "none")
-        .style("font", "12px sans-serif")
+        .style("font", "bold 12px sans-serif")
         .style("text-anchor", "left")
         
-      newNodes  
+        newNodes  
         .append('g')
-        .selectAll('text')
-        .data(function(d){return node_states[d.name]})
-        .enter()
-        .append('text')
-        .attr('x', 15)
-        .attr('y', function(d, i){return 30 + i * 20;})
-        .text(function(d) { return d;})
-        .style("font", "12px sans-serif")
-        .style("text-anchor", "left");
+        .each(multiple)
+        
+        function multiple(d)
+        {
+        
+          var svg = d3.select(this);
+          var states = node_states[d.name];
+          var marginal_prob = []
+          states.forEach(function(key, i) 
+               { var item = {};
+                 item['name'] = states[i];
+                 item['value'] = marginal_probs[d.name][i];
+                 marginal_prob.push(item);
+               });
+          var format = d3.format(".3f")
+          var margin = ({top: 40, right: 20, bottom: 10, left: 30})
+          var height = states.length * 15 + margin.top + margin.bottom
+          var width = d.width;
+          
+          x = d3.scaleLinear()
+            .domain([0, 1])
+            .range([margin.left, width - margin.right])
+          y = d3.scaleBand()
+             .domain(states)
+             .range([margin.top, height - margin.bottom])
+             .padding(0.1)
+             
+          xAxis = function(g) {
+            g
+            .attr("transform", "translate(0,"+margin.top+")")
+            .call(d3.axisTop(x).ticks(width / 80))
+            .call(function(g) { return g.select(".domain").remove();})
+          }
+            
+          yAxis = function (g) {
+            g
+            .attr("transform", "translate(" + margin.left +",0)")
+            .call(d3.axisLeft(y).tickSizeOuter(0))  
+          }
+          
+          svg.append("g")
+            .attr("fill", "steelblue")
+            .selectAll("rect")
+            .data(marginal_prob)
+            .enter().append("rect")
+              .attr("id", function(s) {return d.name + "$" + s.name;})
+              .attr("x", x(0))
+              .attr("y", function(d) { 
+                            return y(d.name);})
+              .attr("width", function(d) { 
+                            return x(d.value) - x(0);})
+              .attr("height", y.bandwidth())
+              .on('dblclick', function (d) {
+                if (HTMLWidgets.shinyMode) {
+                  Shiny.onInputChange("newEvidence", d.id);
+                }
+              });
       
+          svg.append("g")
+              .attr("text-anchor", "end")
+              .style("font", "12px sans-serif")
+            .selectAll("text")
+              .data(marginal_prob)
+              .enter().append("text")
+              .attr("fill",  function(d){ 
+                       var color = "white";
+                       if(d.value < 0.5)
+                         color = "black";
+                       return color;})
+              .attr("x", function(d) { 
+                  return x(d.value) +((d.value < 0.5)? 35 : -4);})
+              .attr("y", function(d) { 
+                  return y(d.name) + y.bandwidth() / 2;})
+              .attr("dy", "0.35em")
+              .text(function(d) { 
+                  return format(d.value);});
+          
+          svg.append("g")
+                .call(xAxis);
+          
+          svg.append("g")
+              .call(yAxis);
+        }
         
       nodeElements = newNodes.merge(nodeElements);
       
@@ -376,7 +458,7 @@ HTMLWidgets.widget({
       // update drag line
       dragLine.attr('d', "M"+ xx +","+ yy +"L"+ d3.mouse(this)[0]+","+ d3.mouse(this)[1]);
 
-      restart();
+      //restart();
     }
 
     function mouseup() {
