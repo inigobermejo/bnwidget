@@ -19,7 +19,7 @@ marginal_probs = querygrain(jtree, nodes, type = "marginal")
 jtree_a = setFinding(jtree, nodes = "A", states = "yes")
 jtree_ap = propagate(jtree_a)
 marginal_probs_b = querygrain(jtree_ap)
-bnwidget(nodes, links, cpds, marginal_probs = marginal_probs)
 
 devtools::build()
 devtools::install()
+bnwidget(nodes, links, cpds, marginal_probs = marginal_probs)

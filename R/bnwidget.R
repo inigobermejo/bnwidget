@@ -13,8 +13,8 @@ bnwidget <- function(nodes,
                      linkDistance = 200,
                      opacity = 0.75,
                      charge = 0,
-                     width = NULL, 
-                     height = NULL) {
+                     width = 1000, 
+                     height = 800) {
   
   
   # create a list that contains the settings
@@ -48,7 +48,7 @@ bnwidget <- function(nodes,
 }
 
 #' @export
-bnwidgetOutput <- function(outputId, width = "100%", height = "400px") {
+bnwidgetOutput <- function(outputId, width = "1000px", height = "800px") {
   shinyWidgetOutput(outputId, "bnwidget", width, height, package = "bnwidget")
 }
 #' @export

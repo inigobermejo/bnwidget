@@ -41,6 +41,7 @@ HTMLWidgets.widget({
     var cpds = x.cpds; // HTMLWidgets.dataframeToD3(x.cpds);
     var settings = x.settings;
     var ticksSinceRestart = 0;
+    var nodeColour = '#BFD0E0';
       
     simulation
       .force("charge", d3.forceManyBody().strength(settings.charge))
@@ -219,7 +220,7 @@ HTMLWidgets.widget({
 
       // update existing nodes (reflexive & selected visual states)
       nodeElements.selectAll('.node_background')
-        .style('fill', function(d) {return (d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398';})
+        .style('fill', function(d) {return (d === selectedNode) ? d3.rgb(nodeColour).brighter().toString() : nodeColour;})
 
       // remove old nodes
       nodeElements.exit().remove();
@@ -238,8 +239,8 @@ HTMLWidgets.widget({
         .attr('height', function(d) { return d.height; })
         .attr('rx', 5)
         .attr('ry', 5)
-        .style('fill', '#F2D398') //function(d) {(d === selectedNode) ? d3.rgb('#F2D398').brighter().toString() : '#F2D398';})
-        .style('stroke', function(d) {return d3.rgb('#F2D398').darker().toString();})
+        .style('fill', nodeColour) //function(d) {(d === selectedNode) ? d3.rgb(nodeColour).brighter().toString() : nodeColour;})
+        .style('stroke', function(d) {return d3.rgb(nodeColour).darker().toString();})
         .style("stroke-width", "2px")
 
         newNodes
@@ -263,7 +264,8 @@ HTMLWidgets.widget({
 
           // select node
           mousedownNode = d;
-          selectedNode = (mousedownNode === selectedNode) ? null : mousedownNode;
+          //selectedNode = (mousedownNode === selectedNode) ? null : mousedownNode;
+          selectedNode = mousedownNode;
           selectedLink = null;
           
           if (HTMLWidgets.shinyMode) {
@@ -381,7 +383,7 @@ HTMLWidgets.widget({
               .attr("height", y.bandwidth())
               .on('dblclick', function (d) {
                 if (HTMLWidgets.shinyMode) {
-                  Shiny.onInputChange("newEvidence", d.id);
+                  Shiny.onInputChange("newEvidence", this.id);
                 }
               });
       
