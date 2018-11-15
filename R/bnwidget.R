@@ -13,8 +13,8 @@ bnwidget <- function(nodes,
                      linkDistance = 200,
                      opacity = 0.75,
                      charge = 0,
-                     width = 1000, 
-                     height = 800) {
+                     width = 800, 
+                     height = 600) {
   
   
   # create a list that contains the settings
